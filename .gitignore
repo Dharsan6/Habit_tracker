@@ -1,0 +1,39 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Java / Maven
+target/
+*.class
+*.jar
+*.war
+
+# Environment / secrets
+.env
+*.env
+application-local.properties
+
+# Build output
+dist/
+build/
+out/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# SDKMAN
+.mvn/jvm.config

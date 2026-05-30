@@ -1,0 +1,157 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:latest
+    container_name: lifetracker-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - lifetracker-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Backend Service (Node.js)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lifetracker-backend
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      MONGO_URI: mongodb://admin:password@mongodb:27017/lifetracker?authSource=admin
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production}
+    ports:
+      - "8080:8080"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - lifetracker-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend Service (React)
+  frontend:
+    build:
+      context: ./LifeTrack
+      dockerfile: Dockerfile
+    container_name: lifetracker-frontend
+    environment:
+      - VITE_API_URL=http://localhost:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - lifetracker-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  lifetracker-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+      timeout: 10s
+      retries: 3
+
+  # Flask AI Service
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: lifetracker-ai
+    environment:
+      FLASK_ENV: production
+      BACKEND_URL: http://backend:8080/api
+      AWS_ACCESS_KEY: ${AWS_ACCESS_KEY}
+      AWS_SECRET_KEY: ${AWS_SECRET_KEY}
+      AWS_REGION: us-east-1
+      SQS_QUEUE_URL: ${SQS_QUEUE_URL}
+      MODEL_PATH: /app/models
+    ports:
+      - "5000:5000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - lifetracker-network
+    volumes:
+      - ai_models:/app/models
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: lifetracker-frontend
+    environment:
+      VITE_API_BASE_URL: http://localhost:8080/api
+      VITE_AI_SERVICE_URL: http://localhost:5000
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
+    networks:
+      - lifetracker-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # LocalStack for AWS Services (Optional - for local development)
+  localstack:
+    image: localstack/localstack:latest
+    container_name: lifetracker-localstack
+    environment:
+      - SERVICES=sqs
+      - DEBUG=1
+      - DATA_DIR=/tmp/localstack/data
+    ports:
+      - "4566:4566"  # LocalStack Edge Port
+      - "4510:4510"  # LocalStack Web UI
+      - "4569:4569"  # SQS Port
+    volumes:
+      - localstack_data:/tmp/localstack/data
+    networks:
+      - lifetracker-network
+    profiles:
+      - local
+
+volumes:
+  postgres_data:
+  ai_models:
+  localstack_data:
+
+networks:
+  lifetracker-network:
+    driver: bridge

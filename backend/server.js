@@ -14,13 +14,19 @@ const app = express();
 // ── Middleware ────────────────────────────────────────────────────────────────
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',')
-  : ['http://localhost:5173', 'http://localhost:3000'];
+  : [];
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, curl, Render health checks)
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-    callback(new Error('Not allowed by CORS'));
+    // No origin = server-to-server or curl — always allow
+    if (!origin) return callback(null, true);
+    // If no whitelist configured, allow all (open during dev/initial deploy)
+    if (allowedOrigins.length === 0) return callback(null, true);
+    // Check if origin is in whitelist
+    if (allowedOrigins.some(o => origin.startsWith(o.trim())))
+      return callback(null, true);
+    // Reject but with null (not an error) so preflight returns 200 with no ACAO header
+    return callback(null, false);
   },
   credentials: true,
 }));
